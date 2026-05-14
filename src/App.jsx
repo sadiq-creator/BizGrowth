@@ -251,6 +251,12 @@ const LOGO_CROP_FRAME_SIZE = 260
 const LOGO_OUTPUT_SIZE = 256
 const LOGO_EXPORT_QUALITY = 0.82
 const LOGO_MAX_FILE_SIZE = 6 * 1024 * 1024
+const IMAGE_MAX_FILE_SIZE = 6 * 1024 * 1024
+const HERO_IMAGE_OUTPUT_SIZE = 1200
+const MENU_IMAGE_OUTPUT_SIZE = 900
+const IMAGE_UPLOAD_MAX_DATA_URL_LENGTH = 420000
+const IMAGE_EXPORT_QUALITIES = [0.78, 0.68, 0.58]
+const IMAGE_OUTPUT_SCALES = [1, 0.82, 0.68]
 
 const createLogoDataUrl = (canvas) => {
   const webpDataUrl = canvas.toDataURL('image/webp', LOGO_EXPORT_QUALITY)
@@ -258,6 +264,78 @@ const createLogoDataUrl = (canvas) => {
   return webpDataUrl.startsWith('data:image/webp')
     ? webpDataUrl
     : canvas.toDataURL('image/png')
+}
+
+const readImageFileAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader()
+
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('Image could not be opened.'))
+    reader.readAsDataURL(file)
+  })
+
+const loadImageElement = (source) =>
+  new Promise((resolve, reject) => {
+    const image = new Image()
+
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('Image could not be opened.'))
+    image.src = source
+  })
+
+const exportImageDataUrl = (canvas, quality) => {
+  const webpDataUrl = canvas.toDataURL('image/webp', quality)
+
+  return webpDataUrl.startsWith('data:image/webp')
+    ? webpDataUrl
+    : canvas.toDataURL('image/png')
+}
+
+const createCompressedImageDataUrl = async (file, maxSize) => {
+  if (!file) {
+    return ''
+  }
+
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Choose an image file.')
+  }
+
+  if (file.size > IMAGE_MAX_FILE_SIZE) {
+    throw new Error('Choose an image under 6 MB.')
+  }
+
+  const source = await readImageFileAsDataUrl(file)
+  const image = await loadImageElement(source)
+  const sourceMax = Math.max(image.naturalWidth, image.naturalHeight)
+  const fitScale = sourceMax > maxSize ? maxSize / sourceMax : 1
+  const fittedWidth = Math.max(1, Math.round(image.naturalWidth * fitScale))
+  const fittedHeight = Math.max(1, Math.round(image.naturalHeight * fitScale))
+  let fallbackDataUrl = source
+
+  for (const sizeScale of IMAGE_OUTPUT_SCALES) {
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('2d')
+
+    if (!context) {
+      throw new Error('Image could not be prepared.')
+    }
+
+    canvas.width = Math.max(1, Math.round(fittedWidth * sizeScale))
+    canvas.height = Math.max(1, Math.round(fittedHeight * sizeScale))
+    context.drawImage(image, 0, 0, canvas.width, canvas.height)
+
+    for (const quality of IMAGE_EXPORT_QUALITIES) {
+      const dataUrl = exportImageDataUrl(canvas, quality)
+      fallbackDataUrl = dataUrl
+
+      if (dataUrl.length <= IMAGE_UPLOAD_MAX_DATA_URL_LENGTH) {
+        return dataUrl
+      }
+    }
+  }
+
+  return fallbackDataUrl
 }
 
 const getLogoCropMetrics = (imageSize, scale, offset) => {
@@ -309,6 +387,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [dataIssue, setDataIssue] = useState('')
+  const [adminSessionEmail, setAdminSessionEmail] = useState('')
   const navbarSettings = isAdminRoute && adminPreviewSettings
     ? adminPreviewSettings
     : settings
@@ -374,6 +453,15 @@ function App() {
     setMenuItems((nextMenuItems || []).filter((item) => item.is_available))
   }
 
+  const signOutAdminFromNav = async () => {
+    if (supabase) {
+      await supabase.auth.signOut()
+    }
+
+    setAdminSessionEmail('')
+    setMessage('Signed out.')
+  }
+
   const clearCart = () => {
     setCart([])
   }
@@ -433,7 +521,11 @@ function App() {
 
   return (
     <div className="app-shell" style={themeVars}>
-      <Navbar settings={navbarSettings} />
+      <Navbar
+        adminEmail={adminSessionEmail}
+        settings={navbarSettings}
+        onAdminSignOut={signOutAdminFromNav}
+      />
 
       {message && (
         <button className="app-toast" type="button" onClick={() => setMessage('')}>
@@ -488,6 +580,7 @@ function App() {
               <AdminPage
                 cafeSlug={null}
                 onAdminDataReady={syncAdminData}
+                onAdminSessionChange={setAdminSessionEmail}
                 onAdminSettingsPreview={setAdminPreviewSettings}
                 onPublicRefresh={refreshPublicData}
                 onToast={setMessage}
@@ -500,6 +593,7 @@ function App() {
               <AdminPage
                 cafeSlug={activeCafeSlug}
                 onAdminDataReady={syncAdminData}
+                onAdminSessionChange={setAdminSessionEmail}
                 onAdminSettingsPreview={setAdminPreviewSettings}
                 onPublicRefresh={refreshPublicData}
                 onToast={setMessage}
@@ -531,7 +625,7 @@ function LegacyStaffRedirect() {
   return <Navigate to={`${getCafePath(DEFAULT_CAFE_SLUG, '/staff')}${location.search}`} replace />
 }
 
-function Navbar({ settings }) {
+function Navbar({ adminEmail, onAdminSignOut, settings }) {
   const location = useLocation()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const menuRef = useRef(null)
@@ -606,6 +700,23 @@ function Navbar({ settings }) {
   }, [isMenuOpen])
 
   const handleLinkClick = () => setIsMenuOpen(false)
+  const handleAdminSignOut = () => {
+    setIsMenuOpen(false)
+    onAdminSignOut?.()
+  }
+
+  const showAdminProfile = isAdminPage && adminEmail
+  const renderAdminProfileChip = () => (
+    <div className="admin-profile-chip">
+      <div>
+        <small>Signed in</small>
+        <strong>{adminEmail}</strong>
+      </div>
+      <button className="ghost-button action-danger" type="button" onClick={handleAdminSignOut}>
+        Sign out
+      </button>
+    </div>
+  )
 
   return (
     <header className="navbar">
@@ -646,7 +757,9 @@ function Navbar({ settings }) {
           <BrandMark logoUrl={settings.logo_url} name={settings.cafe_name} />
           <div>
             <strong>{settings.cafe_name}</strong>
-            <small>{isStaffPage ? 'Staff access menu' : 'Customer access menu'}</small>
+            <small>
+              {isAdminPage ? 'Admin access menu' : isStaffPage ? 'Staff access menu' : 'Customer access menu'}
+            </small>
           </div>
         </div>
 
@@ -675,7 +788,19 @@ function Navbar({ settings }) {
             </div>
           )}
         </div>
+
+        {showAdminProfile && (
+          <div className="nav-cabinet-profile">
+            {renderAdminProfileChip()}
+          </div>
+        )}
       </nav>
+
+      {showAdminProfile && (
+        <div className="nav-profile-desktop">
+          {renderAdminProfileChip()}
+        </div>
+      )}
     </header>
   )
 }
@@ -934,7 +1059,11 @@ function FloatingCart({
             </div>
 
             <Link
-              className={cart.length ? 'primary-button center' : 'primary-button center disabled'}
+              className={
+                cart.length
+                  ? 'primary-button center smooth-action-button cart-checkout-button'
+                  : 'primary-button center disabled'
+              }
               to={checkoutPath}
               onClick={onClose}
             >
@@ -1425,7 +1554,7 @@ function OrderQueuePage({ cafeSlug }) {
               >
                 Open receipt
               </Link>
-              <button className="ghost-button" type="button" onClick={() => removeSavedOrder(order.id)}>
+              <button className="ghost-button action-danger" type="button" onClick={() => removeSavedOrder(order.id)}>
                 Remove
               </button>
             </div>
@@ -1552,11 +1681,17 @@ function StaffPage({ cafeSlug }) {
   )
 }
 
-function AdminPage({ cafeSlug, onAdminDataReady, onAdminSettingsPreview, onPublicRefresh, onToast }) {
+function AdminPage({
+  cafeSlug,
+  onAdminDataReady,
+  onAdminSessionChange,
+  onAdminSettingsPreview,
+  onPublicRefresh,
+  onToast,
+}) {
   const location = useLocation()
   const navigate = useNavigate()
   const [adminCredentials, setAdminCredentials] = useState({ email: '', password: '' })
-  const [adminEmail, setAdminEmail] = useState('')
   const [authReady, setAuthReady] = useState(false)
   const [unlocked, setUnlocked] = useState(false)
   const [activeTab, setActiveTab] = useState(() =>
@@ -1631,7 +1766,7 @@ function AdminPage({ cafeSlug, onAdminDataReady, onAdminSettingsPreview, onPubli
         return
       }
 
-      setAdminEmail(data.session?.user?.email || '')
+      onAdminSessionChange(data.session?.user?.email || '')
 
       if (data.session) {
         const opened = await refreshAdmin()
@@ -1648,7 +1783,7 @@ function AdminPage({ cafeSlug, onAdminDataReady, onAdminSettingsPreview, onPubli
     loadSession()
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAdminEmail(session?.user?.email || '')
+      onAdminSessionChange(session?.user?.email || '')
 
       if (!session) {
         setUnlocked(false)
@@ -1690,16 +1825,6 @@ function AdminPage({ cafeSlug, onAdminDataReady, onAdminSettingsPreview, onPubli
     const opened = await refreshAdmin()
     setSaving(false)
     setUnlocked(opened)
-  }
-
-  const signOutAdmin = async () => {
-    if (supabase) {
-      await supabase.auth.signOut()
-    }
-
-    setUnlocked(false)
-    setAdminEmail('')
-    setFeedback('Signed out.')
   }
 
   const updateSetting = (field, value) => {
@@ -1825,6 +1950,32 @@ function AdminPage({ cafeSlug, onAdminDataReady, onAdminSettingsPreview, onPubli
     await onPublicRefresh(settings.cafe_slug || cafeSlug || DEFAULT_CAFE_SLUG)
   }
 
+  const deleteMenuItem = async (item) => {
+    if (!supabase) {
+      setFeedback(supabaseConfigError || 'Supabase is not connected.')
+      return
+    }
+
+    setSaving(true)
+    const { error } = await supabase.rpc('admin_delete_menu_item', {
+      p_item_id: item.id,
+    })
+    setSaving(false)
+
+    if (error) {
+      setFeedback(normalizeError(error))
+      return
+    }
+
+    if (editingMenuId === item.id) {
+      resetMenuForm()
+    }
+
+    setFeedback('Menu item deleted.')
+    await refreshAdmin()
+    await onPublicRefresh(settings.cafe_slug || cafeSlug || DEFAULT_CAFE_SLUG)
+  }
+
   const rotateStaffCode = async () => {
     if (!supabase) {
       setFeedback(supabaseConfigError || 'Supabase is not connected.')
@@ -1897,16 +2048,6 @@ function AdminPage({ cafeSlug, onAdminDataReady, onAdminSettingsPreview, onPubli
         text="Change the cafe details, menu, payment options, order rules, and QR links."
       />
 
-      <div className="glass-panel access-panel admin-session-panel">
-        <div>
-          <span className="eyebrow">Signed in</span>
-          <h2>{adminEmail || 'Admin account'}</h2>
-        </div>
-        <button className="ghost-button" type="button" onClick={signOutAdmin}>
-          Sign out
-        </button>
-      </div>
-
       <AdminTabNavigation activeTab={activeTab} onChangeTab={changeAdminTab} />
 
       {feedback && <div className="glass-panel empty-state">{feedback}</div>}
@@ -1927,7 +2068,11 @@ function AdminPage({ cafeSlug, onAdminDataReady, onAdminSettingsPreview, onPubli
             />
           )}
           <div className="button-row">
-            <button className="primary-button" disabled={saving} type="submit">
+            <button
+              className="primary-button admin-compact-button smooth-action-button save-settings-button"
+              disabled={saving}
+              type="submit"
+            >
               {saving ? 'Saving' : 'Save settings'}
             </button>
           </div>
@@ -1940,6 +2085,7 @@ function AdminPage({ cafeSlug, onAdminDataReady, onAdminSettingsPreview, onPubli
           form={menuForm}
           items={menuItems}
           saving={saving}
+          onDelete={deleteMenuItem}
           onEdit={editMenuItem}
           onReset={resetMenuForm}
           onSave={saveMenuItem}
@@ -1978,7 +2124,9 @@ function AdminTabNavigation({ activeTab, onChangeTab }) {
 
 function DetailsTab({ settings, updateSetting }) {
   const fileInputRef = useRef(null)
+  const heroFileInputRef = useRef(null)
   const dragRef = useRef(null)
+  const [heroImageFeedback, setHeroImageFeedback] = useState({ text: '', tone: '' })
   const [logoCrop, setLogoCrop] = useState({
     error: '',
     imageSize: null,
@@ -2043,6 +2191,25 @@ function DetailsTab({ settings, updateSetting }) {
     }
 
     reader.readAsDataURL(file)
+  }
+
+  const chooseHeroImageFile = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+
+    if (!file) {
+      return
+    }
+
+    setHeroImageFeedback({ text: 'Preparing hero image.', tone: '' })
+
+    try {
+      const nextImage = await createCompressedImageDataUrl(file, HERO_IMAGE_OUTPUT_SIZE)
+      updateSetting('hero_image_url', nextImage)
+      setHeroImageFeedback({ text: 'Hero image ready. Save settings to publish.', tone: 'success' })
+    } catch (error) {
+      setHeroImageFeedback({ text: error.message || 'Hero image could not be opened.', tone: 'error' })
+    }
   }
 
   const handleLogoImageLoad = (event) => {
@@ -2194,21 +2361,68 @@ function DetailsTab({ settings, updateSetting }) {
           onChange={chooseLogoFile}
         />
         <div className="button-row logo-upload-actions">
-          <button className="primary-button" type="button" onClick={() => fileInputRef.current?.click()}>
+          <button
+            className="primary-button admin-compact-button"
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+          >
             Choose image
           </button>
-          <button className="ghost-button" type="button" onClick={() => updateSetting('logo_url', '')}>
+          <button
+            className="ghost-button admin-compact-button action-danger"
+            type="button"
+            onClick={() => updateSetting('logo_url', '')}
+          >
             Remove logo
           </button>
         </div>
       </div>
-      <label>
-        Hero image URL
+      <div className="image-upload-field wide">
+        <label>
+          Hero image
+          <input
+            value={settings.hero_image_url || ''}
+            onChange={(event) => {
+              setHeroImageFeedback({ text: '', tone: '' })
+              updateSetting('hero_image_url', event.target.value)
+            }}
+          />
+        </label>
+        {settings.hero_image_url && (
+          <div className="image-upload-preview hero-image-preview">
+            <img src={settings.hero_image_url} alt="Hero preview" />
+          </div>
+        )}
         <input
-          value={settings.hero_image_url || ''}
-          onChange={(event) => updateSetting('hero_image_url', event.target.value)}
+          ref={heroFileInputRef}
+          accept="image/*"
+          className="file-input-hidden"
+          type="file"
+          onChange={chooseHeroImageFile}
         />
-      </label>
+        <div className="button-row image-upload-actions">
+          <button
+            className="primary-button admin-compact-button"
+            type="button"
+            onClick={() => heroFileInputRef.current?.click()}
+          >
+            Choose image
+          </button>
+          <button
+            className="ghost-button admin-compact-button action-danger"
+            type="button"
+            onClick={() => {
+              setHeroImageFeedback({ text: '', tone: '' })
+              updateSetting('hero_image_url', '')
+            }}
+          >
+            Remove image
+          </button>
+        </div>
+        {heroImageFeedback.text && (
+          <p className={`form-feedback ${heroImageFeedback.tone}`}>{heroImageFeedback.text}</p>
+        )}
+      </div>
 
       {logoCrop.source && (
         <div className="crop-modal-backdrop" role="presentation">
@@ -2255,7 +2469,7 @@ function DetailsTab({ settings, updateSetting }) {
               <button className="primary-button" type="button" onClick={applyLogoCrop}>
                 Use cropped logo
               </button>
-              <button className="ghost-button" type="button" onClick={closeLogoCrop}>
+              <button className="ghost-button action-danger" type="button" onClick={closeLogoCrop}>
                 Cancel
               </button>
             </div>
@@ -2373,6 +2587,7 @@ function MenuAdminTab({
   editingMenuId,
   form,
   items,
+  onDelete,
   onEdit,
   onReset,
   onSave,
@@ -2380,59 +2595,149 @@ function MenuAdminTab({
   onUpdateForm,
   saving,
 }) {
-  return (
-    <section className="admin-layout">
-      <form className="glass-panel menu-form" onSubmit={onSave}>
-        <span className="eyebrow">Menu editor</span>
-        <h2>{editingMenuId ? 'Edit item' : 'Add item'}</h2>
+  const imageInputRef = useRef(null)
+  const [imageFeedback, setImageFeedback] = useState({ text: '', tone: '' })
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null)
+
+  useEffect(() => {
+    setImageFeedback({ text: '', tone: '' })
+  }, [editingMenuId])
+
+  useEffect(() => {
+    setDeleteConfirmId(null)
+  }, [items])
+
+  const chooseMenuImageFile = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+
+    if (!file) {
+      return
+    }
+
+    setImageFeedback({ text: 'Preparing menu image.', tone: '' })
+
+    try {
+      const nextImage = await createCompressedImageDataUrl(file, MENU_IMAGE_OUTPUT_SIZE)
+      onUpdateForm('image_url', nextImage)
+      setImageFeedback({ text: 'Menu image ready. Save the item to publish.', tone: 'success' })
+    } catch (error) {
+      setImageFeedback({ text: error.message || 'Menu image could not be opened.', tone: 'error' })
+    }
+  }
+
+  const deleteItem = async (item) => {
+    await onDelete(item)
+    setDeleteConfirmId(null)
+  }
+
+  const renderMenuForm = (isEditing) => (
+    <form className={isEditing ? 'glass-panel menu-form menu-edit-modal' : 'glass-panel menu-form'} onSubmit={onSave}>
+      <span className="eyebrow">Menu editor</span>
+      <h2>{isEditing ? 'Edit item' : 'Add item'}</h2>
+      <label>
+        Item name
+        <input required value={form.name} onChange={(event) => onUpdateForm('name', event.target.value)} />
+      </label>
+      <label>
+        Description
+        <textarea
+          required
+          value={form.description}
+          onChange={(event) => onUpdateForm('description', event.target.value)}
+        />
+      </label>
+      <label>
+        Category
+        <input required value={form.category} onChange={(event) => onUpdateForm('category', event.target.value)} />
+      </label>
+      <label>
+        Price
+        <input
+          required
+          min="1"
+          step="0.01"
+          type="number"
+          value={form.price}
+          onChange={(event) => onUpdateForm('price', event.target.value)}
+        />
+      </label>
+      <div className="image-upload-field">
         <label>
-          Item name
-          <input required value={form.name} onChange={(event) => onUpdateForm('name', event.target.value)} />
-        </label>
-        <label>
-          Description
-          <textarea
-            required
-            value={form.description}
-            onChange={(event) => onUpdateForm('description', event.target.value)}
-          />
-        </label>
-        <label>
-          Category
-          <input required value={form.category} onChange={(event) => onUpdateForm('category', event.target.value)} />
-        </label>
-        <label>
-          Price
+          Product image
           <input
-            required
-            min="1"
-            step="0.01"
-            type="number"
-            value={form.price}
-            onChange={(event) => onUpdateForm('price', event.target.value)}
+            value={form.image_url}
+            onChange={(event) => {
+              setImageFeedback({ text: '', tone: '' })
+              onUpdateForm('image_url', event.target.value)
+            }}
           />
         </label>
-        <label>
-          Image URL
-          <input value={form.image_url} onChange={(event) => onUpdateForm('image_url', event.target.value)} />
-        </label>
-        <label className="check-row">
-          <input
-            checked={form.is_available}
-            type="checkbox"
-            onChange={(event) => onUpdateForm('is_available', event.target.checked)}
-          />
-          Available for customers
-        </label>
-        <button className="primary-button" disabled={saving} type="submit">
-          {saving ? 'Saving' : editingMenuId ? 'Update menu item' : 'Add menu item'}
-        </button>
-        {editingMenuId && (
-          <button className="ghost-button center" type="button" onClick={onReset}>
-            Cancel edit
-          </button>
+        {form.image_url && (
+          <div className="image-upload-preview menu-image-preview">
+            <img src={form.image_url} alt="Menu preview" />
+          </div>
         )}
-      </form>
+        <input
+          ref={imageInputRef}
+          accept="image/*"
+          className="file-input-hidden"
+          type="file"
+          onChange={chooseMenuImageFile}
+        />
+        <div className="button-row image-upload-actions">
+          <button
+            className="primary-button admin-compact-button"
+            type="button"
+            onClick={() => imageInputRef.current?.click()}
+          >
+            Choose image
+          </button>
+          <button
+            className="ghost-button admin-compact-button action-danger"
+            type="button"
+            onClick={() => {
+              setImageFeedback({ text: '', tone: '' })
+              onUpdateForm('image_url', '')
+            }}
+          >
+            Remove image
+          </button>
+        </div>
+        {imageFeedback.text && (
+          <p className={`form-feedback ${imageFeedback.tone}`}>{imageFeedback.text}</p>
+        )}
+      </div>
+      <label className="check-row">
+        <input
+          checked={form.is_available}
+          type="checkbox"
+          onChange={(event) => onUpdateForm('is_available', event.target.checked)}
+        />
+        Available for customers
+      </label>
+      <button className="primary-button admin-compact-button" disabled={saving} type="submit">
+        {saving ? 'Saving' : isEditing ? 'Update menu item' : 'Add menu item'}
+      </button>
+      {isEditing && (
+        <button className="ghost-button center admin-compact-button action-danger" type="button" onClick={onReset}>
+          Cancel edit
+        </button>
+      )}
+    </form>
+  )
+
+  return (
+    <section className={editingMenuId ? 'admin-layout menu-editing-layout' : 'admin-layout'}>
+      {!editingMenuId && renderMenuForm(false)}
+
+      {editingMenuId && (
+        <div className="menu-edit-backdrop" role="presentation">
+          <div role="dialog" aria-modal="true" aria-label="Edit menu item">
+            {renderMenuForm(true)}
+          </div>
+        </div>
+      )}
 
       <div className="admin-menu-list">
         {items.map((item) => (
@@ -2448,9 +2753,38 @@ function MenuAdminTab({
               <button className="ghost-button" type="button" onClick={() => onEdit(item)}>
                 Edit
               </button>
-              <button className="ghost-button" type="button" onClick={() => onToggle(item)}>
+              <button
+                className={item.is_available ? 'ghost-button action-warning' : 'ghost-button action-success'}
+                disabled={saving}
+                type="button"
+                onClick={() => onToggle(item)}
+              >
                 {item.is_available ? 'Disable' : 'Enable'}
               </button>
+              {deleteConfirmId === item.id ? (
+                <div className="menu-delete-confirm">
+                  <button
+                    className="ghost-button action-danger"
+                    disabled={saving}
+                    type="button"
+                    onClick={() => deleteItem(item)}
+                  >
+                    Confirm delete
+                  </button>
+                  <button className="ghost-button" type="button" onClick={() => setDeleteConfirmId(null)}>
+                    Keep
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="ghost-button action-danger"
+                  disabled={saving}
+                  type="button"
+                  onClick={() => setDeleteConfirmId(item.id)}
+                >
+                  Delete
+                </button>
+              )}
             </div>
           </article>
         ))}
@@ -2578,7 +2912,11 @@ function OrderTicket({ children, onUpdateStatus, order, staff = false }) {
         <div className="status-actions staff-status-actions">
           {STATUS_OPTIONS.map((status) => (
             <button
-              className={order.order_status === status ? 'chip active' : 'chip'}
+              className={[
+                'chip',
+                `status-action-${status}`,
+                order.order_status === status ? 'active' : '',
+              ].filter(Boolean).join(' ')}
               disabled={order.order_status === status}
               key={status}
               type="button"

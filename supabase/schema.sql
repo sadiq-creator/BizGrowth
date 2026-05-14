@@ -266,6 +266,7 @@ drop function if exists public.admin_get_settings(text);
 drop function if exists public.admin_update_settings(text, jsonb);
 drop function if exists public.admin_save_menu_item(text, jsonb);
 drop function if exists public.admin_toggle_menu_item(text, uuid, boolean);
+drop function if exists public.admin_delete_menu_item(uuid);
 drop function if exists public.admin_rotate_staff_code(text);
 drop function if exists public.get_public_cafe_settings();
 drop function if exists public.get_public_cafe_settings(text);
@@ -904,8 +905,12 @@ begin
     raise exception 'Logo must be an HTTPS image or an uploaded image.';
   end if;
 
-  if v_hero_image_url is not null and (length(v_hero_image_url) > 2000 or v_hero_image_url !~* '^https://') then
-    raise exception 'Hero image must use an HTTPS URL.';
+  if v_hero_image_url is not null
+    and (
+      length(v_hero_image_url) > 500000
+      or v_hero_image_url !~* '^(data:image/(png|jpeg|jpg|webp);base64,|https://)'
+    ) then
+    raise exception 'Hero image must be an HTTPS image or an uploaded image.';
   end if;
 
   if coalesce(payload ->> 'primary_color', '#000000') !~* '^#[0-9a-f]{6}$'
@@ -997,8 +1002,12 @@ begin
     raise exception 'Menu price is outside the allowed range.';
   end if;
 
-  if v_image_url is not null and (length(v_image_url) > 2000 or v_image_url !~* '^https://') then
-    raise exception 'Menu image must use an HTTPS URL.';
+  if v_image_url is not null
+    and (
+      length(v_image_url) > 500000
+      or v_image_url !~* '^(data:image/(png|jpeg|jpg|webp);base64,|https://)'
+    ) then
+    raise exception 'Menu image must be an HTTPS image or an uploaded image.';
   end if;
 
   if v_item_id is null then
@@ -1075,6 +1084,35 @@ begin
 end;
 $$;
 
+create or replace function public.admin_delete_menu_item(p_item_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_cafe_id uuid;
+  v_item public.menu_items%rowtype;
+begin
+  v_cafe_id := public.require_admin('admin_delete_menu_item');
+
+  delete from public.menu_items
+  where cafe_id = v_cafe_id
+    and id = p_item_id
+  returning *
+  into v_item;
+
+  if not found then
+    raise exception 'Menu item was not found.';
+  end if;
+
+  return jsonb_build_object(
+    'deleted', true,
+    'id', p_item_id
+  );
+end;
+$$;
+
 create or replace function public.admin_rotate_staff_code()
 returns jsonb
 language plpgsql
@@ -1140,4 +1178,5 @@ grant execute on function public.admin_get_settings() to authenticated;
 grant execute on function public.admin_update_settings(jsonb) to authenticated;
 grant execute on function public.admin_save_menu_item(jsonb) to authenticated;
 grant execute on function public.admin_toggle_menu_item(uuid, boolean) to authenticated;
+grant execute on function public.admin_delete_menu_item(uuid) to authenticated;
 grant execute on function public.admin_rotate_staff_code() to authenticated;

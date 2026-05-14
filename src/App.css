@@ -45,6 +45,13 @@ body.nav-cabinet-open .nav-brand {
   opacity: 0.55;
 }
 
+body.nav-cabinet-open .app-main {
+  filter: blur(3px);
+  opacity: 0.84;
+  transform: scale(0.998);
+  transform-origin: top center;
+}
+
 body.nav-cabinet-open .floating-cart-button,
 body.nav-cabinet-open .floating-cart-backdrop,
 body.nav-cabinet-open .floating-cart-panel {
@@ -82,6 +89,10 @@ img {
   width: min(1220px, calc(100% - 2rem));
   margin: 0 auto;
   padding: 2rem 0 3rem;
+  transition:
+    filter 0.28s ease,
+    opacity 0.28s ease,
+    transform 0.28s ease;
 }
 
 .navbar {
@@ -189,6 +200,64 @@ img {
 
 .nav-cabinet {
   margin-left: auto;
+}
+
+.nav-profile-desktop {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.nav-cabinet-profile {
+  display: none;
+}
+
+.admin-profile-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: min(300px, 28vw);
+  padding: 0.34rem 0.4rem 0.34rem 0.58rem;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.46);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    0 10px 24px rgba(91, 116, 214, 0.08);
+}
+
+.admin-profile-chip div {
+  display: grid;
+  gap: 0.04rem;
+  min-width: 0;
+}
+
+.admin-profile-chip small,
+.admin-profile-chip strong {
+  display: block;
+}
+
+.admin-profile-chip small {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.admin-profile-chip strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.76rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-profile-chip .ghost-button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0.34rem 0.58rem;
+  font-size: 0.82rem;
 }
 
 .nav-cabinet-section {
@@ -312,9 +381,56 @@ img {
   pointer-events: none;
 }
 
+.smooth-action-button {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  transform: translateZ(0);
+}
+
+.smooth-action-button::before {
+  content: '';
+  position: absolute;
+  inset: -45% auto -45% -70%;
+  z-index: 1;
+  width: 52%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.34), transparent);
+  opacity: 1;
+  pointer-events: none;
+  transform: skewX(-18deg);
+  animation: buttonSheen 3.4s ease-in-out infinite;
+}
+
+.smooth-action-button:hover::before,
+.smooth-action-button:focus-visible::before {
+  animation-duration: 1.15s;
+}
+
+.smooth-action-button:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+.save-settings-button {
+  animation: saveButtonBreath 2.8s ease-in-out infinite;
+}
+
+.cart-checkout-button {
+  animation:
+    checkoutButtonIn 0.48s cubic-bezier(0.2, 0.84, 0.28, 1.08) both,
+    checkoutButtonPulse 2.1s ease-in-out 0.42s infinite;
+}
+
 .primary-button.small {
   min-height: 40px;
   padding: 0.5rem 0.9rem;
+}
+
+.admin-compact-button {
+  width: auto;
+  min-height: 36px;
+  padding: 0.42rem 0.74rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
 }
 
 .ghost-button.small {
@@ -565,6 +681,90 @@ label small {
 .ghost-button:disabled {
   opacity: 0.52;
   pointer-events: none;
+}
+
+.action-danger {
+  background: var(--danger-soft);
+  border-color: rgba(214, 82, 82, 0.26);
+  color: var(--danger);
+}
+
+.action-warning {
+  background: var(--warning-soft);
+  border-color: rgba(216, 155, 66, 0.3);
+  color: #9a6420;
+}
+
+.action-success {
+  background: var(--success-soft);
+  border-color: rgba(47, 154, 120, 0.28);
+  color: var(--success);
+}
+
+.action-danger:hover {
+  background: rgba(214, 82, 82, 0.2);
+  color: #b53f3f;
+  box-shadow: 0 10px 24px rgba(214, 82, 82, 0.12);
+}
+
+.action-warning:hover {
+  background: rgba(216, 155, 66, 0.2);
+  color: #835417;
+  box-shadow: 0 10px 24px rgba(216, 155, 66, 0.12);
+}
+
+.action-success:hover {
+  background: rgba(47, 154, 120, 0.2);
+  color: #23765d;
+  box-shadow: 0 10px 24px rgba(47, 154, 120, 0.12);
+}
+
+@keyframes buttonSheen {
+  0% {
+    left: -70%;
+  }
+
+  100% {
+    left: 120%;
+  }
+}
+
+@keyframes saveButtonBreath {
+  0%,
+  100% {
+    box-shadow: 0 14px 30px rgba(91, 116, 214, 0.22);
+  }
+
+  50% {
+    box-shadow:
+      0 18px 38px rgba(91, 116, 214, 0.28),
+      0 0 0 6px rgba(240, 139, 168, 0.12);
+  }
+}
+
+@keyframes checkoutButtonIn {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes checkoutButtonPulse {
+  0%,
+  100% {
+    box-shadow: 0 14px 30px rgba(91, 116, 214, 0.24);
+  }
+
+  50% {
+    box-shadow:
+      0 20px 42px rgba(91, 116, 214, 0.3),
+      0 0 0 7px rgba(255, 255, 255, 0.36);
+  }
 }
 
 .toolbar {
@@ -836,7 +1036,7 @@ label small {
   gap: 0.75rem;
   min-width: 198px;
   padding: 0.85rem 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.58);
+  border: 0;
   border-radius: 24px;
   background: linear-gradient(135deg, var(--accent), var(--accent-strong), var(--accent-warm));
   color: #fff;
@@ -1157,6 +1357,30 @@ label small {
   min-width: 106px;
 }
 
+.staff-status-actions .status-action-completed {
+  background: var(--success-soft);
+  border-color: rgba(47, 154, 120, 0.28);
+  color: var(--success);
+}
+
+.staff-status-actions .status-action-cancelled {
+  background: var(--danger-soft);
+  border-color: rgba(214, 82, 82, 0.26);
+  color: var(--danger);
+}
+
+.staff-status-actions .status-action-completed:hover,
+.staff-status-actions .status-action-completed.active {
+  background: rgba(47, 154, 120, 0.2);
+  color: #23765d;
+}
+
+.staff-status-actions .status-action-cancelled:hover,
+.staff-status-actions .status-action-cancelled.active {
+  background: rgba(214, 82, 82, 0.2);
+  color: #b53f3f;
+}
+
 .status-badge {
   padding: 0.5rem 0.75rem;
   border-radius: 999px;
@@ -1178,8 +1402,8 @@ label small {
 }
 
 .status-badge.completed {
-  background: rgba(45, 55, 72, 0.1);
-  color: var(--text);
+  background: var(--success-soft);
+  color: var(--success);
 }
 
 .status-badge.unavailable {
@@ -1206,6 +1430,10 @@ label small {
 
 .admin-tab-panel {
   padding: 1.2rem;
+}
+
+.admin-tab-panel > .button-row {
+  margin-top: 0.85rem;
 }
 
 .settings-grid {
@@ -1255,6 +1483,42 @@ label small {
 
 .logo-upload-actions {
   gap: 0.5rem;
+}
+
+.logo-upload-actions,
+.image-upload-actions {
+  align-items: center;
+}
+
+.logo-upload-actions .admin-compact-button,
+.image-upload-actions .admin-compact-button {
+  flex: 0 0 auto;
+}
+
+.image-upload-field {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.image-upload-preview {
+  overflow: hidden;
+  border: 1px solid rgba(91, 116, 214, 0.14);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.image-upload-preview img {
+  display: block;
+  width: 100%;
+  object-fit: cover;
+}
+
+.hero-image-preview img {
+  aspect-ratio: 16 / 9;
+}
+
+.menu-image-preview img {
+  aspect-ratio: 4 / 3;
 }
 
 .file-input-hidden {
@@ -1453,6 +1717,48 @@ label small {
   top: 104px;
 }
 
+.menu-editing-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.menu-edit-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  overflow: auto;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(91, 116, 214, 0.18), transparent 34%),
+    rgba(31, 42, 68, 0.26);
+  backdrop-filter: blur(14px);
+}
+
+.menu-edit-backdrop > [role='dialog'] {
+  width: min(560px, 100%);
+}
+
+.menu-edit-modal {
+  position: static;
+  top: auto;
+  width: 100%;
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+}
+
+.menu-form .image-upload-field {
+  margin-bottom: 0.75rem;
+}
+
+.menu-form .image-upload-actions {
+  margin-bottom: 0.3rem;
+}
+
+.menu-form .image-upload-field + .check-row {
+  margin-top: 0.55rem;
+}
+
 .check-row {
   display: flex;
   align-items: center;
@@ -1490,6 +1796,11 @@ label small {
 }
 
 .button-column {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.menu-delete-confirm {
   display: grid;
   gap: 0.5rem;
 }
@@ -1574,6 +1885,10 @@ label small {
     font-size: 0.72rem;
   }
 
+  .nav-profile-desktop {
+    display: none;
+  }
+
   .nav-toggle {
     position: relative;
     z-index: 82;
@@ -1606,7 +1921,7 @@ label small {
     right: 0;
     z-index: 81;
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
     align-items: stretch;
     width: min(330px, 82vw);
     height: 100vh;
@@ -1678,7 +1993,7 @@ label small {
     width: 100%;
     min-height: 0;
     overflow-y: auto;
-    padding: 0.1rem 0.05rem 0.4rem;
+    padding: 0.1rem 0.05rem 0.85rem;
     scrollbar-width: thin;
     scrollbar-color: rgba(91, 116, 214, 0.5) rgba(91, 116, 214, 0.08);
   }
@@ -1716,6 +2031,38 @@ label small {
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.42),
       0 10px 24px rgba(91, 116, 214, 0.08);
+  }
+
+  .nav-cabinet-profile {
+    display: block;
+    padding-top: 0.8rem;
+    background: linear-gradient(180deg, rgba(248, 251, 255, 0), rgba(255, 255, 255, 0.72) 28%);
+    border-top: 1px solid rgba(124, 148, 214, 0.18);
+  }
+
+  .nav-cabinet-profile .admin-profile-chip {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.65rem;
+    max-width: none;
+    width: 100%;
+    padding: 0.85rem;
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.34);
+  }
+
+  .nav-cabinet-profile .admin-profile-chip small {
+    font-size: 0.7rem;
+  }
+
+  .nav-cabinet-profile .admin-profile-chip strong {
+    font-size: 0.86rem;
+  }
+
+  .nav-cabinet-profile .admin-profile-chip .ghost-button {
+    width: 100%;
+    min-height: 44px;
+    font-size: 1rem;
   }
 
   .nav-cabinet-section {
@@ -2024,6 +2371,17 @@ label small {
     width: 100%;
   }
 
+  .admin-compact-button,
+  .logo-upload-actions .admin-compact-button,
+  .image-upload-actions .admin-compact-button {
+    width: auto;
+  }
+
+  .logo-upload-actions,
+  .image-upload-actions {
+    justify-content: flex-start;
+  }
+
   .floating-cart-button {
     right: 1rem;
     bottom: 1rem;
@@ -2057,6 +2415,17 @@ label small {
 
   .floating-cart-actions .ghost-button {
     width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .smooth-action-button,
+  .smooth-action-button::before,
+  .save-settings-button,
+  .cart-checkout-button,
+  .app-main {
+    animation: none;
+    transition: none;
   }
 }
 
