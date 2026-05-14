@@ -1570,6 +1570,7 @@ function StaffPage({ cafeSlug }) {
   const accessCode = new URLSearchParams(location.search).get('access') || ''
   const [orders, setOrders] = useState([])
   const [filter, setFilter] = useState('active')
+  const [orderSearch, setOrderSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [feedback, setFeedback] = useState('')
 
@@ -1632,13 +1633,32 @@ function StaffPage({ cafeSlug }) {
     await fetchOrders()
   }
 
-  const visibleOrders = orders.filter((order) => {
+  const orderSearchQuery = orderSearch.trim().toLowerCase()
+  const matchesOrderSearch = (order) => {
+    if (!orderSearchQuery) {
+      return true
+    }
+
+    return [
+      order.order_code,
+      order.id,
+      order.customer_name,
+      order.table_number,
+    ]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(orderSearchQuery))
+  }
+
+  const statusFilteredOrders = orders.filter((order) => {
     if (filter === 'active') {
       return ['pending', 'preparing', 'ready'].includes(order.order_status)
     }
 
     return order.order_status === filter
   })
+  const visibleOrders = orderSearchQuery
+    ? orders.filter(matchesOrderSearch)
+    : statusFilteredOrders
 
   return (
     <section className="page-stack">
@@ -1649,6 +1669,14 @@ function StaffPage({ cafeSlug }) {
       />
 
       <div className="toolbar glass-panel">
+        <label className="search-field staff-order-search">
+          Search order
+          <input
+            value={orderSearch}
+            onChange={(event) => setOrderSearch(event.target.value)}
+            placeholder="BG-20260514 or customer name"
+          />
+        </label>
         <div className="category-row">
           {['active', ...STATUS_OPTIONS].map((status) => (
             <button
@@ -1669,7 +1697,10 @@ function StaffPage({ cafeSlug }) {
       {feedback && <div className="glass-panel empty-state">{feedback}</div>}
       {loading && <div className="glass-panel empty-state">Loading counter orders</div>}
       {!loading && !visibleOrders.length && !feedback && (
-        <EmptyPanel title="No tickets here" text="New orders will show in this view." />
+        <EmptyPanel
+          title={orderSearchQuery ? 'No matching ticket' : 'No tickets here'}
+          text={orderSearchQuery ? 'Check the order code or customer name.' : 'New orders will show in this view.'}
+        />
       )}
 
       <div className="staff-grid">

@@ -864,6 +864,14 @@ label small {
   margin: 0;
 }
 
+.staff-order-search {
+  width: min(460px, 100%);
+}
+
+.staff-order-search input {
+  margin-top: 0.35rem;
+}
+
 .category-row,
 .status-actions,
 .button-row {
