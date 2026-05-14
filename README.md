@@ -1,15 +1,19 @@
 # BizGrowth Cafe
 
-BizGrowth Cafe is a QR ordering app for cafes and restaurants.
+BizGrowth Cafe is a multi-cafe QR ordering app.
 
-Customers scan a QR code, browse the menu, add items to the cart, and place an order. Staff scan a private QR code to open the counter queue. Admins sign in with Supabase Auth to edit cafe details, menu items, payments, order rules, and QR links.
+Customers scan a cafe-specific QR code, browse that cafe menu, add items to the cart, and place an order. Staff scan that cafe staff QR code to open only that cafe counter queue. Cafe owners sign in with their assigned Supabase Auth account to edit only their cafe.
 
 ## Routes
 
-- Customer QR: `/#/customer`
-- Order Queue: `/#/queue`
-- Staff QR: `/#/staff?access=STAFF_CODE`
-- Admin QR: `/#/admin`
+- Customer QR: `/#/c/demo-cafe/customer`
+- Order Queue: `/#/c/demo-cafe/queue`
+- Staff QR: `/#/c/demo-cafe/staff?access=STAFF_CODE`
+- Admin QR: `/#/c/demo-cafe/admin`
+- Legacy customer route: `/#/customer`
+- Legacy admin route: `/#/admin`
+
+Legacy routes redirect to `demo-cafe`.
 
 ## Supabase Setup
 
@@ -26,25 +30,24 @@ Open Supabase SQL Editor, then run:
 supabase/schema.sql
 ```
 
-Create your admin account in Supabase:
+The schema creates `demo-cafe` and migrates existing single-cafe data into that cafe.
+
+## Add A Cafe Owner
 
 1. Open Supabase Dashboard.
 2. Go to Authentication.
-3. Create a user with your admin email and password.
-4. Copy your admin email.
-5. Run this SQL after `supabase/schema.sql`.
-6. You can also edit and run `supabase/add-admin-example.sql`.
+3. Create a user with the cafe owner email and password.
+4. Open `supabase/add-cafe-admin-example.sql`.
+5. Change:
+   - `v_admin_email`
+   - `v_cafe_slug`
+   - `v_cafe_name`
+6. Run the helper SQL in Supabase SQL Editor.
+7. Open `/#/c/your-cafe-slug/admin`.
+8. Sign in with the cafe owner email and password.
+9. Open QR Codes, then print or copy the cafe-specific QR links.
 
-```sql
-insert into public.admin_users (user_id, email)
-select id, email
-from auth.users
-where email = 'your-admin-email@example.com'
-on conflict (user_id) do update
-set email = excluded.email;
-```
-
-Use Admin Mode, open the QR Codes tab, then copy or print the customer, staff, and admin QR links.
+Each cafe owner account manages one cafe only.
 
 ## Security Before GitHub
 
@@ -52,7 +55,7 @@ Use Admin Mode, open the QR Codes tab, then copy or print the customer, staff, a
 - Commit `.env.example`, not `.env`.
 - Never use a Supabase `service_role` key in the frontend.
 - Run `supabase/schema.sql` before deployment.
-- Add your Supabase Auth admin user to `public.admin_users`.
+- Add cafe owners through `public.cafe_admins`.
 - Rotate the Staff QR code before sharing the app.
 - Read `SECURITY.md` before publishing the repository.
 
@@ -70,10 +73,10 @@ Start the app:
 npm run dev
 ```
 
-The dev server opens:
+Open:
 
 ```bash
-/#/customer
+/#/c/demo-cafe/customer
 ```
 
 ## Checks

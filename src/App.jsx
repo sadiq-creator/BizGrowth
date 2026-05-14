@@ -13,8 +13,9 @@ import { QRCodeCanvas } from 'qrcode.react'
 import { isSupabaseConfigured, supabase, supabaseConfigError } from './lib/supabaseClient'
 import './App.css'
 
-const CART_KEY = 'bizgrowth-cafe-cart-v2'
-const ORDER_QUEUE_KEY = 'bizgrowth-cafe-order-queue-v1'
+const DEFAULT_CAFE_SLUG = 'demo-cafe'
+const CART_KEY_PREFIX = 'bizgrowth-cafe-cart-v3'
+const ORDER_QUEUE_KEY_PREFIX = 'bizgrowth-cafe-order-queue-v2'
 
 const STATUS_OPTIONS = ['pending', 'preparing', 'ready', 'completed', 'cancelled']
 
@@ -36,7 +37,23 @@ const ADMIN_TABS = [
 const getAdminTabId = (tabId) =>
   ADMIN_TABS.some((tab) => tab.id === tabId) ? tabId : 'details'
 
+const normalizeCafeSlug = (slug) =>
+  String(slug || DEFAULT_CAFE_SLUG)
+    .trim()
+    .toLowerCase() || DEFAULT_CAFE_SLUG
+
+const getCafePath = (cafeSlug, path = '/customer') => `/c/${normalizeCafeSlug(cafeSlug)}${path}`
+
+const getCafeSlugFromPath = (pathname) => {
+  const match = pathname.match(/^\/c\/([^/]+)/)
+  return match ? normalizeCafeSlug(match[1]) : DEFAULT_CAFE_SLUG
+}
+
+const getCartKey = (cafeSlug) => `${CART_KEY_PREFIX}:${normalizeCafeSlug(cafeSlug)}`
+const getOrderQueueKey = (cafeSlug) => `${ORDER_QUEUE_KEY_PREFIX}:${normalizeCafeSlug(cafeSlug)}`
+
 const DEFAULT_SETTINGS = {
+  cafe_slug: DEFAULT_CAFE_SLUG,
   cafe_name: 'BizGrowth Cafe',
   tagline: 'Order ahead. Skip the line.',
   welcome_text: 'Browse the menu, build your order, and choose your payment path before reaching the counter.',
@@ -112,18 +129,18 @@ const formatPeso = (value) =>
 
 const normalizeError = (error) => error?.message || 'Something went wrong. Please try again.'
 
-const readStoredCart = () => {
+const readStoredCart = (cafeSlug) => {
   try {
-    const stored = localStorage.getItem(CART_KEY)
+    const stored = localStorage.getItem(getCartKey(cafeSlug))
     return stored ? JSON.parse(stored) : []
   } catch {
     return []
   }
 }
 
-const readStoredOrderRefs = () => {
+const readStoredOrderRefs = (cafeSlug) => {
   try {
-    const stored = localStorage.getItem(ORDER_QUEUE_KEY)
+    const stored = localStorage.getItem(getOrderQueueKey(cafeSlug))
     const parsed = stored ? JSON.parse(stored) : []
 
     return Array.isArray(parsed)
@@ -134,13 +151,13 @@ const readStoredOrderRefs = () => {
   }
 }
 
-const writeStoredOrderRefs = (orders) => {
-  localStorage.setItem(ORDER_QUEUE_KEY, JSON.stringify(orders))
+const writeStoredOrderRefs = (cafeSlug, orders) => {
+  localStorage.setItem(getOrderQueueKey(cafeSlug), JSON.stringify(orders))
 }
 
-const saveOrderReference = (order) => {
+const saveOrderReference = (cafeSlug, order) => {
   if (!order?.id || !order?.receipt_token) {
-    return readStoredOrderRefs()
+    return readStoredOrderRefs(cafeSlug)
   }
 
   const savedOrder = {
@@ -152,16 +169,16 @@ const saveOrderReference = (order) => {
     created_at: order.created_at || new Date().toISOString(),
     saved_at: new Date().toISOString(),
   }
-  const existingOrders = readStoredOrderRefs().filter((item) => item.id !== savedOrder.id)
+  const existingOrders = readStoredOrderRefs(cafeSlug).filter((item) => item.id !== savedOrder.id)
   const nextOrders = [savedOrder, ...existingOrders].slice(0, 20)
 
-  writeStoredOrderRefs(nextOrders)
+  writeStoredOrderRefs(cafeSlug, nextOrders)
   return nextOrders
 }
 
-const removeOrderReference = (orderId) => {
-  const nextOrders = readStoredOrderRefs().filter((item) => item.id !== orderId)
-  writeStoredOrderRefs(nextOrders)
+const removeOrderReference = (cafeSlug, orderId) => {
+  const nextOrders = readStoredOrderRefs(cafeSlug).filter((item) => item.id !== orderId)
+  writeStoredOrderRefs(cafeSlug, nextOrders)
   return nextOrders
 }
 
@@ -282,12 +299,19 @@ const clampLogoCropOffset = (imageSize, scale, offset) => {
 }
 
 function App() {
+  const location = useLocation()
+  const activeCafeSlug = getCafeSlugFromPath(location.pathname)
+  const isAdminRoute = location.pathname === '/admin' || location.pathname.endsWith('/admin')
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
+  const [adminPreviewSettings, setAdminPreviewSettings] = useState(null)
   const [menuItems, setMenuItems] = useState(DEFAULT_MENU_ITEMS)
-  const [cart, setCart] = useState(readStoredCart)
+  const [cart, setCart] = useState(() => readStoredCart(activeCafeSlug))
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [dataIssue, setDataIssue] = useState('')
+  const navbarSettings = isAdminRoute && adminPreviewSettings
+    ? adminPreviewSettings
+    : settings
 
   const cartTotal = useMemo(
     () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
@@ -310,12 +334,13 @@ function App() {
     [settings],
   )
 
-  const refreshPublicData = async () => {
+  const refreshPublicData = async (nextCafeSlug = activeCafeSlug) => {
+    const cafeSlug = normalizeCafeSlug(nextCafeSlug)
     setLoading(true)
     setDataIssue('')
 
     if (!isSupabaseConfigured || !supabase) {
-      setSettings(DEFAULT_SETTINGS)
+      setSettings({ ...DEFAULT_SETTINGS, cafe_slug: cafeSlug })
       setMenuItems(DEFAULT_MENU_ITEMS)
       setDataIssue(supabaseConfigError || 'Add Supabase keys and run supabase/schema.sql for shared menu and order data.')
       setLoading(false)
@@ -323,22 +348,22 @@ function App() {
     }
 
     const [settingsResult, menuResult] = await Promise.all([
-      supabase.rpc('get_public_cafe_settings'),
-      supabase.from('menu_items').select('*').eq('is_available', true).order('category').order('name'),
+      supabase.rpc('get_public_cafe_settings', { p_cafe_slug: cafeSlug }),
+      supabase.rpc('get_public_menu_items', { p_cafe_slug: cafeSlug }),
     ])
 
-    if (settingsResult.error) {
-      setSettings(DEFAULT_SETTINGS)
+    if (settingsResult.error || !settingsResult.data) {
+      setSettings({ ...DEFAULT_SETTINGS, cafe_slug: cafeSlug })
       setDataIssue(`Run the updated supabase/schema.sql file. ${normalizeError(settingsResult.error)}`)
     } else {
       setSettings(normalizeSettings(settingsResult.data))
     }
 
     if (menuResult.error) {
-      setMenuItems(DEFAULT_MENU_ITEMS)
+      setMenuItems([])
       setDataIssue(`Menu data needs the updated Supabase SQL. ${normalizeError(menuResult.error)}`)
     } else {
-      setMenuItems(menuResult.data?.length ? menuResult.data : DEFAULT_MENU_ITEMS)
+      setMenuItems(Array.isArray(menuResult.data) ? menuResult.data : [])
     }
 
     setLoading(false)
@@ -388,20 +413,27 @@ function App() {
   }
 
   useEffect(() => {
-    refreshPublicData()
-  }, [])
+    setCart(readStoredCart(activeCafeSlug))
+    refreshPublicData(activeCafeSlug)
+  }, [activeCafeSlug])
 
   useEffect(() => {
     updateDocumentBrand(settings)
   }, [settings])
 
   useEffect(() => {
-    localStorage.setItem(CART_KEY, JSON.stringify(cart))
-  }, [cart])
+    localStorage.setItem(getCartKey(activeCafeSlug), JSON.stringify(cart))
+  }, [activeCafeSlug, cart])
+
+  useEffect(() => {
+    if (!isAdminRoute) {
+      setAdminPreviewSettings(null)
+    }
+  }, [isAdminRoute])
 
   return (
     <div className="app-shell" style={themeVars}>
-      <Navbar settings={settings} />
+      <Navbar settings={navbarSettings} />
 
       {message && (
         <button className="app-toast" type="button" onClick={() => setMessage('')}>
@@ -410,54 +442,93 @@ function App() {
       )}
 
       <main className="app-main">
-        {dataIssue && <DataBanner text={dataIssue} onRefresh={refreshPublicData} />}
+        {dataIssue && <DataBanner text={dataIssue} onRefresh={() => refreshPublicData(activeCafeSlug)} />}
         <Routes>
-          <Route path="/" element={<Navigate to="/customer" replace />} />
+          <Route path="/" element={<Navigate to={getCafePath(DEFAULT_CAFE_SLUG, '/customer')} replace />} />
+          <Route path="/customer" element={<Navigate to={getCafePath(DEFAULT_CAFE_SLUG, '/customer')} replace />} />
+          <Route path="/checkout" element={<Navigate to={getCafePath(DEFAULT_CAFE_SLUG, '/checkout')} replace />} />
+          <Route path="/queue" element={<Navigate to={getCafePath(DEFAULT_CAFE_SLUG, '/queue')} replace />} />
+          <Route path="/receipt/:orderId" element={<LegacyReceiptRedirect />} />
+          <Route path="/staff" element={<LegacyStaffRedirect />} />
           <Route
-            path="/customer"
+            path="/c/:cafeSlug/customer"
             element={
               <CustomerPage
                 cart={cart}
                 cartCount={cartCount}
                 cartTotal={cartTotal}
+                cafeSlug={activeCafeSlug}
                 items={menuItems}
                 loading={loading}
                 settings={settings}
                 onAddToCart={addToCart}
-                onRefresh={refreshPublicData}
+                onRefresh={() => refreshPublicData(activeCafeSlug)}
                 onUpdateCartQuantity={updateCartQuantity}
               />
             }
           />
           <Route
-            path="/checkout"
+            path="/c/:cafeSlug/checkout"
             element={
               <CheckoutPage
                 cart={cart}
                 cartTotal={cartTotal}
+                cafeSlug={activeCafeSlug}
                 clearCart={clearCart}
                 settings={settings}
               />
             }
           />
-          <Route path="/queue" element={<OrderQueuePage />} />
-          <Route path="/receipt/:orderId" element={<ReceiptPage />} />
-          <Route path="/staff" element={<StaffPage />} />
+          <Route path="/c/:cafeSlug/queue" element={<OrderQueuePage cafeSlug={activeCafeSlug} />} />
+          <Route path="/c/:cafeSlug/receipt/:orderId" element={<ReceiptPage cafeSlug={activeCafeSlug} />} />
+          <Route path="/c/:cafeSlug/staff" element={<StaffPage cafeSlug={activeCafeSlug} />} />
           <Route
             path="/admin"
             element={
               <AdminPage
+                cafeSlug={null}
                 onAdminDataReady={syncAdminData}
+                onAdminSettingsPreview={setAdminPreviewSettings}
                 onPublicRefresh={refreshPublicData}
                 onToast={setMessage}
               />
             }
           />
-          <Route path="*" element={<Navigate to="/customer" replace />} />
+          <Route
+            path="/c/:cafeSlug/admin"
+            element={
+              <AdminPage
+                cafeSlug={activeCafeSlug}
+                onAdminDataReady={syncAdminData}
+                onAdminSettingsPreview={setAdminPreviewSettings}
+                onPublicRefresh={refreshPublicData}
+                onToast={setMessage}
+              />
+            }
+          />
+          <Route path="*" element={<Navigate to={getCafePath(DEFAULT_CAFE_SLUG, '/customer')} replace />} />
         </Routes>
       </main>
     </div>
   )
+}
+
+function LegacyReceiptRedirect() {
+  const { orderId } = useParams()
+  const location = useLocation()
+
+  return (
+    <Navigate
+      to={`${getCafePath(DEFAULT_CAFE_SLUG, `/receipt/${orderId}`)}${location.search}`}
+      replace
+    />
+  )
+}
+
+function LegacyStaffRedirect() {
+  const location = useLocation()
+
+  return <Navigate to={`${getCafePath(DEFAULT_CAFE_SLUG, '/staff')}${location.search}`} replace />
 }
 
 function Navbar({ settings }) {
@@ -466,18 +537,20 @@ function Navbar({ settings }) {
   const menuRef = useRef(null)
   const toggleRef = useRef(null)
   const lockedScrollYRef = useRef(0)
+  const cafeSlug = settings.cafe_slug || getCafeSlugFromPath(location.pathname)
   const staffLink = `${location.pathname}${location.search}`
-  const isStaffPage = location.pathname === '/staff'
-  const isAdminPage = location.pathname === '/admin'
+  const isStaffPage = location.pathname === getCafePath(cafeSlug, '/staff') || location.pathname === '/staff'
+  const isAdminPage = location.pathname === getCafePath(cafeSlug, '/admin') || location.pathname === '/admin'
   const isCustomerPage = !isStaffPage && !isAdminPage
   const activeAdminTab = getAdminTabId(new URLSearchParams(location.search).get('tab'))
+  const adminBasePath = getCafePath(cafeSlug, '/admin')
   const navItems = [
-    { to: '/customer', label: 'Menu' },
-    ...(isCustomerPage ? [{ to: '/queue', label: 'Order Queue' }] : []),
+    { to: getCafePath(cafeSlug, '/customer'), label: 'Menu' },
+    ...(isCustomerPage ? [{ to: getCafePath(cafeSlug, '/queue'), label: 'Order Queue' }] : []),
     ...(isStaffPage
       ? [
           { to: staffLink, label: 'Staff' },
-          { to: '/admin', label: 'Admin' },
+          { to: adminBasePath, label: 'Admin' },
         ]
       : []),
   ]
@@ -536,7 +609,7 @@ function Navbar({ settings }) {
 
   return (
     <header className="navbar">
-      <Link className="nav-brand" to="/customer" onClick={handleLinkClick}>
+      <Link className="nav-brand" to={getCafePath(cafeSlug, '/customer')} onClick={handleLinkClick}>
         <BrandMark logoUrl={settings.logo_url} name={settings.cafe_name} />
         <span>
           <strong>{settings.cafe_name}</strong>
@@ -593,7 +666,7 @@ function Navbar({ settings }) {
                 <NavLink
                   className={() => (activeAdminTab === tab.id ? 'active' : '')}
                   key={tab.id}
-                  to={`/admin?tab=${tab.id}`}
+                  to={`${adminBasePath}?tab=${tab.id}`}
                   onClick={handleLinkClick}
                 >
                   {tab.label}
@@ -611,11 +684,9 @@ function BrandMark({ logoUrl, name }) {
   const initials = getBrandInitials(name)
 
   const [imageFailed, setImageFailed] = useState(false)
-  const [imageReady, setImageReady] = useState(false)
 
   useEffect(() => {
     setImageFailed(false)
-    setImageReady(false)
   }, [logoUrl])
 
   if (logoUrl && !imageFailed) {
@@ -623,11 +694,10 @@ function BrandMark({ logoUrl, name }) {
       <span className="brand-logo-wrap">
         <span>{initials || 'BG'}</span>
         <img
-          className={imageReady ? 'brand-logo-img brand-logo-img-ready' : 'brand-logo-img'}
+          className="brand-logo-img"
           src={logoUrl}
           alt={name}
           onError={() => setImageFailed(true)}
-          onLoad={() => setImageReady(true)}
         />
       </span>
     )
@@ -651,6 +721,7 @@ function CustomerPage({
   cart,
   cartCount,
   cartTotal,
+  cafeSlug,
   items,
   loading,
   onAddToCart,
@@ -692,7 +763,10 @@ function CustomerPage({
             <a className="primary-button" href="#menu">
               Browse menu
             </a>
-            <Link className={cartCount ? 'ghost-button' : 'ghost-button disabled'} to="/checkout">
+            <Link
+              className={cartCount ? 'ghost-button' : 'ghost-button disabled'}
+              to={getCafePath(cafeSlug, '/checkout')}
+            >
               Checkout
             </Link>
           </div>
@@ -754,6 +828,7 @@ function CustomerPage({
         onOpen={() => setCartOpen(true)}
         onRefresh={onRefresh}
         onUpdateCartQuantity={onUpdateCartQuantity}
+        checkoutPath={getCafePath(cafeSlug, '/checkout')}
       />
     </section>
   )
@@ -781,6 +856,7 @@ function MenuCard({ item, onAddToCart }) {
 function FloatingCart({
   cart,
   cartCount,
+  checkoutPath,
   isOpen,
   onClose,
   onOpen,
@@ -859,7 +935,7 @@ function FloatingCart({
 
             <Link
               className={cart.length ? 'primary-button center' : 'primary-button center disabled'}
-              to="/checkout"
+              to={checkoutPath}
               onClick={onClose}
             >
               Checkout
@@ -895,7 +971,7 @@ function QuantityStepper({ onChange, quantity }) {
   )
 }
 
-function CheckoutPage({ cart, cartTotal, clearCart, settings }) {
+function CheckoutPage({ cafeSlug, cart, cartTotal, clearCart, settings }) {
   const navigate = useNavigate()
   const enabledPaymentOptions = useMemo(
     () => PAYMENT_OPTIONS.filter((option) => settings[option.enabledKey]),
@@ -964,7 +1040,10 @@ function CheckoutPage({ cart, cartTotal, clearCart, settings }) {
       })),
     }
 
-    const { data, error } = await supabase.rpc('create_customer_order', { payload })
+    const { data, error } = await supabase.rpc('create_customer_order', {
+      p_cafe_slug: cafeSlug,
+      payload,
+    })
     setSubmitting(false)
 
     if (error) {
@@ -972,7 +1051,7 @@ function CheckoutPage({ cart, cartTotal, clearCart, settings }) {
       return
     }
 
-    saveOrderReference({
+    saveOrderReference(cafeSlug, {
       id: data.id,
       receipt_token: data.receipt_token,
       order_code: data.order_code,
@@ -980,7 +1059,7 @@ function CheckoutPage({ cart, cartTotal, clearCart, settings }) {
       total_amount: cartTotal,
     })
     clearCart()
-    navigate(`/receipt/${data.id}?token=${encodeURIComponent(data.receipt_token)}`)
+    navigate(`${getCafePath(cafeSlug, `/receipt/${data.id}`)}?token=${encodeURIComponent(data.receipt_token)}`)
   }
 
   if (!cart.length) {
@@ -988,7 +1067,7 @@ function CheckoutPage({ cart, cartTotal, clearCart, settings }) {
       <EmptyPanel
         title="Your cart is empty"
         text="Choose menu items from the menu page before checkout."
-        action={<Link className="primary-button" to="/customer">Back to menu</Link>}
+        action={<Link className="primary-button" to={getCafePath(cafeSlug, '/customer')}>Back to menu</Link>}
       />
     )
   }
@@ -1091,13 +1170,19 @@ function CheckoutPage({ cart, cartTotal, clearCart, settings }) {
           </div>
         </div>
 
-        <OrderSummary cart={cart} feedback={feedback} submitting={submitting} total={cartTotal} />
+        <OrderSummary
+          backPath={getCafePath(cafeSlug, '/customer')}
+          cart={cart}
+          feedback={feedback}
+          submitting={submitting}
+          total={cartTotal}
+        />
       </form>
     </section>
   )
 }
 
-function OrderSummary({ cart, feedback, submitting, total }) {
+function OrderSummary({ backPath, cart, feedback, submitting, total }) {
   return (
     <aside className="glass-panel order-summary">
       <h2>Order summary</h2>
@@ -1119,14 +1204,14 @@ function OrderSummary({ cart, feedback, submitting, total }) {
       <button className="primary-button" disabled={submitting || !cart.length} type="submit">
         {submitting ? 'Creating order' : 'Place order'}
       </button>
-      <Link className="ghost-button center" to="/customer">
+      <Link className="ghost-button center" to={backPath}>
         Back to menu
       </Link>
     </aside>
   )
 }
 
-function ReceiptPage() {
+function ReceiptPage({ cafeSlug }) {
   const { orderId } = useParams()
   const location = useLocation()
   const token = new URLSearchParams(location.search).get('token')
@@ -1151,6 +1236,7 @@ function ReceiptPage() {
     }
 
     const { data, error } = await supabase.rpc('get_order_receipt', {
+      p_cafe_slug: cafeSlug,
       p_order_id: orderId,
       p_receipt_token: token,
     })
@@ -1162,7 +1248,7 @@ function ReceiptPage() {
     }
 
     setOrder(data)
-    saveOrderReference({ ...data, receipt_token: token })
+    saveOrderReference(cafeSlug, { ...data, receipt_token: token })
   }
 
   useEffect(() => {
@@ -1209,7 +1295,7 @@ function ReceiptPage() {
         </div>
 
         <div className="button-row">
-          <Link className="primary-button" to="/customer">
+          <Link className="primary-button" to={getCafePath(cafeSlug, '/customer')}>
             Order more
           </Link>
         </div>
@@ -1218,14 +1304,14 @@ function ReceiptPage() {
   )
 }
 
-function OrderQueuePage() {
-  const [savedOrders, setSavedOrders] = useState(readStoredOrderRefs)
+function OrderQueuePage({ cafeSlug }) {
+  const [savedOrders, setSavedOrders] = useState(() => readStoredOrderRefs(cafeSlug))
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(false)
   const [feedback, setFeedback] = useState('')
 
   const refreshQueue = async () => {
-    const storedOrders = readStoredOrderRefs()
+    const storedOrders = readStoredOrderRefs(cafeSlug)
     setSavedOrders(storedOrders)
 
     if (!storedOrders.length) {
@@ -1259,6 +1345,7 @@ function OrderQueuePage() {
     const nextOrders = await Promise.all(
       storedOrders.map(async (order) => {
         const { data, error } = await supabase.rpc('get_order_receipt', {
+          p_cafe_slug: cafeSlug,
           p_order_id: order.id,
           p_receipt_token: order.receipt_token,
         })
@@ -1292,10 +1379,10 @@ function OrderQueuePage() {
     return () => {
       window.clearInterval(refreshTimer)
     }
-  }, [])
+  }, [cafeSlug])
 
   const removeSavedOrder = (orderId) => {
-    const nextSavedOrders = removeOrderReference(orderId)
+    const nextSavedOrders = removeOrderReference(cafeSlug, orderId)
     setSavedOrders(nextSavedOrders)
     setOrders((currentOrders) => currentOrders.filter((order) => order.id !== orderId))
   }
@@ -1323,7 +1410,7 @@ function OrderQueuePage() {
         <EmptyPanel
           title="No orders saved"
           text="Place an order first. Your queue will show order status from this browser."
-          action={<Link className="primary-button" to="/customer">Go to menu</Link>}
+          action={<Link className="primary-button" to={getCafePath(cafeSlug, '/customer')}>Go to menu</Link>}
         />
       )}
 
@@ -1334,7 +1421,7 @@ function OrderQueuePage() {
             <div className="button-row queue-card-actions">
               <Link
                 className="primary-button"
-                to={`/receipt/${order.id}?token=${encodeURIComponent(order.receipt_token)}`}
+                to={`${getCafePath(cafeSlug, `/receipt/${order.id}`)}?token=${encodeURIComponent(order.receipt_token)}`}
               >
                 Open receipt
               </Link>
@@ -1349,7 +1436,7 @@ function OrderQueuePage() {
   )
 }
 
-function StaffPage() {
+function StaffPage({ cafeSlug }) {
   const location = useLocation()
   const accessCode = new URLSearchParams(location.search).get('access') || ''
   const [orders, setOrders] = useState([])
@@ -1370,6 +1457,7 @@ function StaffPage() {
 
     setLoading(true)
     const { data, error } = await supabase.rpc('staff_list_orders', {
+      p_cafe_slug: cafeSlug,
       p_staff_access_code: accessCode,
     })
     setLoading(false)
@@ -1392,7 +1480,7 @@ function StaffPage() {
     return () => {
       window.clearInterval(refreshTimer)
     }
-  }, [accessCode])
+  }, [accessCode, cafeSlug])
 
   const updateStatus = async (orderId, status) => {
     if (!supabase) {
@@ -1401,6 +1489,7 @@ function StaffPage() {
     }
 
     const { error } = await supabase.rpc('staff_update_order_status', {
+      p_cafe_slug: cafeSlug,
       p_staff_access_code: accessCode,
       p_order_id: orderId,
       p_status: status,
@@ -1463,7 +1552,7 @@ function StaffPage() {
   )
 }
 
-function AdminPage({ onAdminDataReady, onPublicRefresh, onToast }) {
+function AdminPage({ cafeSlug, onAdminDataReady, onAdminSettingsPreview, onPublicRefresh, onToast }) {
   const location = useLocation()
   const navigate = useNavigate()
   const [adminCredentials, setAdminCredentials] = useState({ email: '', password: '' })
@@ -1486,8 +1575,9 @@ function AdminPage({ onAdminDataReady, onPublicRefresh, onToast }) {
 
   const changeAdminTab = (tabId) => {
     const nextTab = getAdminTabId(tabId)
+    const adminSlug = settings.cafe_slug || cafeSlug || DEFAULT_CAFE_SLUG
     setActiveTab(nextTab)
-    navigate(`/admin?tab=${nextTab}`, { replace: true })
+    navigate(`${getCafePath(adminSlug, '/admin')}?tab=${nextTab}`, { replace: true })
   }
 
   const updateAdminCredentials = (field, value) => {
@@ -1497,9 +1587,15 @@ function AdminPage({ onAdminDataReady, onPublicRefresh, onToast }) {
   const applyAdminData = (payload) => {
     const nextSettings = normalizeSettings(payload?.settings || payload)
     const nextMenu = payload?.menu_items || []
+    const nextSlug = nextSettings.cafe_slug || cafeSlug || DEFAULT_CAFE_SLUG
     setSettings(nextSettings)
     setMenuItems(nextMenu)
+    onAdminSettingsPreview(nextSettings)
     onAdminDataReady(nextSettings, nextMenu)
+
+    if (location.pathname !== getCafePath(nextSlug, '/admin')) {
+      navigate(`${getCafePath(nextSlug, '/admin')}?tab=${activeTab}`, { replace: true })
+    }
   }
 
   const refreshAdmin = async () => {
@@ -1607,7 +1703,11 @@ function AdminPage({ onAdminDataReady, onPublicRefresh, onToast }) {
   }
 
   const updateSetting = (field, value) => {
-    setSettings((current) => ({ ...current, [field]: value }))
+    setSettings((current) => {
+      const nextSettings = normalizeSettings({ ...current, [field]: value })
+      onAdminSettingsPreview(nextSettings)
+      return nextSettings
+    })
   }
 
   const saveSettings = async (event) => {
@@ -1647,7 +1747,7 @@ function AdminPage({ onAdminDataReady, onPublicRefresh, onToast }) {
 
     setFeedback('Settings saved.')
     await refreshAdmin()
-    await onPublicRefresh()
+    await onPublicRefresh(settings.cafe_slug || cafeSlug || DEFAULT_CAFE_SLUG)
   }
 
   const updateMenuForm = (field, value) => {
@@ -1702,7 +1802,7 @@ function AdminPage({ onAdminDataReady, onPublicRefresh, onToast }) {
     setFeedback(editingMenuId ? 'Menu item updated.' : 'Menu item added.')
     resetMenuForm()
     await refreshAdmin()
-    await onPublicRefresh()
+    await onPublicRefresh(settings.cafe_slug || cafeSlug || DEFAULT_CAFE_SLUG)
   }
 
   const toggleMenuItem = async (item) => {
@@ -1722,7 +1822,7 @@ function AdminPage({ onAdminDataReady, onPublicRefresh, onToast }) {
     }
 
     await refreshAdmin()
-    await onPublicRefresh()
+    await onPublicRefresh(settings.cafe_slug || cafeSlug || DEFAULT_CAFE_SLUG)
   }
 
   const rotateStaffCode = async () => {
@@ -1761,7 +1861,7 @@ function AdminPage({ onAdminDataReady, onPublicRefresh, onToast }) {
         <form className="auth-card pin-card" onSubmit={unlockAdmin}>
           <span className="eyebrow">Admin mode</span>
           <h1>Admin login</h1>
-          <p>Use the Supabase Auth account listed in the admin_users table.</p>
+          <p>Use the Supabase Auth account assigned to this cafe.</p>
           <label>
             Email
             <input
@@ -2360,9 +2460,10 @@ function MenuAdminTab({
 }
 
 function QrTab({ onCopyLink, onRotateStaffCode, settings }) {
-  const customerLink = getHashUrl('/customer')
-  const staffLink = getHashUrl(`/staff?access=${encodeURIComponent(settings.staff_access_code || '')}`)
-  const adminLink = getHashUrl('/admin')
+  const cafeSlug = settings.cafe_slug || DEFAULT_CAFE_SLUG
+  const customerLink = getHashUrl(getCafePath(cafeSlug, '/customer'))
+  const staffLink = getHashUrl(`${getCafePath(cafeSlug, '/staff')}?access=${encodeURIComponent(settings.staff_access_code || '')}`)
+  const adminLink = getHashUrl(getCafePath(cafeSlug, '/admin'))
 
   return (
     <section className="qr-tab">
@@ -2445,9 +2546,9 @@ function InfoTile({ label, value }) {
 
 function OrderTicket({ children, onUpdateStatus, order, staff = false }) {
   return (
-    <article className="order-ticket glass-panel">
-      <div className="ticket-head">
-        <div>
+    <article className={staff ? 'order-ticket staff-ticket glass-panel' : 'order-ticket glass-panel'}>
+      <div className={staff ? 'ticket-head staff-ticket-head' : 'ticket-head'}>
+        <div className={staff ? 'staff-ticket-customer' : undefined}>
           <span className="eyebrow">{order.order_code}</span>
           <h2>{order.customer_name}</h2>
           <small>{formatOrderTime(order.created_at)}</small>
@@ -2455,16 +2556,16 @@ function OrderTicket({ children, onUpdateStatus, order, staff = false }) {
         <span className={`status-badge ${order.order_status}`}>{order.order_status}</span>
       </div>
 
-      <div className="receipt-grid">
+      <div className={staff ? 'receipt-grid staff-ticket-details' : 'receipt-grid'}>
         <InfoTile label="Payment" value={String(order.payment_status || '').replaceAll('_', ' ')} />
         <InfoTile label="Method" value={order.payment_method} />
         <InfoTile label="Total" value={formatPeso(order.total_amount)} />
         <InfoTile label="Table" value={order.table_number || 'None'} />
       </div>
 
-      <div className="receipt-items">
+      <div className={staff ? 'receipt-items staff-ticket-items' : 'receipt-items'}>
         {order.items?.map((item) => (
-          <div className="summary-row" key={item.id}>
+          <div className={staff ? 'summary-row staff-ticket-item' : 'summary-row'} key={item.id}>
             <span>
               {item.quantity} x {item.item_name}
             </span>
@@ -2474,7 +2575,7 @@ function OrderTicket({ children, onUpdateStatus, order, staff = false }) {
       </div>
 
       {staff && (
-        <div className="status-actions">
+        <div className="status-actions staff-status-actions">
           {STATUS_OPTIONS.map((status) => (
             <button
               className={order.order_status === status ? 'chip active' : 'chip'}

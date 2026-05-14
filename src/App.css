@@ -167,11 +167,6 @@ img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 0;
-  transition: opacity 0.18s ease;
-}
-
-.brand-logo-img-ready {
   opacity: 1;
 }
 
@@ -1063,6 +1058,105 @@ label small {
   align-items: flex-start;
 }
 
+.staff-ticket {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1.15rem;
+  border-radius: 24px;
+}
+
+.staff-ticket-head {
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(91, 116, 214, 0.1);
+}
+
+.staff-ticket-customer {
+  min-width: 0;
+  display: grid;
+  gap: 0.18rem;
+}
+
+.staff-ticket-customer .eyebrow {
+  width: fit-content;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.staff-ticket-customer h2 {
+  font-size: 1.55rem;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.staff-ticket-customer small {
+  color: var(--muted);
+}
+
+.staff-ticket .status-badge {
+  flex: 0 0 auto;
+  margin-top: 0;
+}
+
+.staff-ticket-details {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin: 0;
+}
+
+.staff-ticket .info-tile {
+  min-width: 0;
+  padding: 0.68rem;
+  border-radius: 15px;
+  text-align: left;
+}
+
+.staff-ticket .info-tile span {
+  font-size: 0.72rem;
+  line-height: 1.1;
+}
+
+.staff-ticket .info-tile strong {
+  font-size: 0.95rem;
+  line-height: 1.22;
+  overflow-wrap: anywhere;
+}
+
+.staff-ticket-items {
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.staff-ticket-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  font-size: 0.95rem;
+}
+
+.staff-ticket-item span {
+  min-width: 0;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.staff-ticket-item strong {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.staff-status-actions {
+  padding-top: 0.2rem;
+}
+
+.staff-status-actions .chip {
+  justify-content: center;
+  min-width: 106px;
+}
+
 .status-badge {
   padding: 0.5rem 0.75rem;
   border-radius: 999px;
@@ -1729,6 +1823,75 @@ label small {
     display: none;
   }
 
+  .receipt-page {
+    align-items: start;
+  }
+
+  .receipt-card {
+    padding: 1rem;
+  }
+
+  .receipt-card h1 {
+    font-size: 2.05rem;
+    line-height: 1;
+    overflow-wrap: anywhere;
+  }
+
+  .receipt-card p {
+    margin-top: 0.55rem;
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+
+  .receipt-card .receipt-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+    margin: 0.85rem 0;
+  }
+
+  .receipt-card .info-tile {
+    min-width: 0;
+    padding: 0.62rem 0.55rem;
+    border-radius: 14px;
+  }
+
+  .receipt-card .info-tile span {
+    font-size: 0.68rem;
+    line-height: 1.1;
+  }
+
+  .receipt-card .info-tile strong {
+    font-size: 0.84rem;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .receipt-card .receipt-items {
+    gap: 0.35rem;
+    margin: 0.7rem 0 0.85rem;
+  }
+
+  .receipt-card .summary-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 0.6rem;
+    padding: 0.5rem 0;
+    text-align: left;
+    font-size: 0.9rem;
+  }
+
+  .receipt-card .summary-row span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+  }
+
+  .receipt-card .summary-row strong {
+    white-space: nowrap;
+    text-align: right;
+  }
+
   .toolbar,
   .order-summary,
   .checkout-methods,
@@ -1744,6 +1907,67 @@ label small {
 
   .queue-toolbar {
     grid-template-columns: 1fr;
+  }
+
+  .staff-grid {
+    grid-template-columns: 1fr;
+    gap: 0.85rem;
+  }
+
+  .staff-ticket {
+    gap: 0.7rem;
+    padding: 0.9rem;
+    border-radius: 22px;
+  }
+
+  .staff-ticket-head {
+    gap: 0.65rem;
+    padding-bottom: 0.6rem;
+  }
+
+  .staff-ticket-customer h2 {
+    font-size: 1.35rem;
+  }
+
+  .staff-ticket-customer small {
+    font-size: 0.82rem;
+  }
+
+  .staff-ticket .status-badge {
+    padding: 0.42rem 0.62rem;
+    font-size: 0.72rem;
+  }
+
+  .staff-ticket-details {
+    gap: 0.45rem;
+  }
+
+  .staff-ticket .info-tile {
+    padding: 0.58rem 0.52rem;
+    border-radius: 14px;
+  }
+
+  .staff-ticket .info-tile span {
+    font-size: 0.66rem;
+  }
+
+  .staff-ticket .info-tile strong {
+    font-size: 0.84rem;
+  }
+
+  .staff-ticket-item {
+    gap: 0.55rem;
+    padding: 0.48rem 0;
+    font-size: 0.88rem;
+  }
+
+  .staff-status-actions {
+    gap: 0.45rem;
+  }
+
+  .staff-status-actions .chip {
+    flex: 1 1 calc(50% - 0.45rem);
+    min-width: 0;
   }
 
   .category-row {
@@ -1778,10 +2002,6 @@ label small {
 
   .menu-card-footer {
     align-items: stretch;
-  }
-
-  .receipt-grid {
-    grid-template-columns: 1fr;
   }
 
   .admin-menu-card {
@@ -1858,6 +2078,68 @@ label small {
   .receipt-card h1,
   .hero-copy h1 {
     font-size: 2.25rem;
+  }
+
+  .receipt-card {
+    padding: 0.85rem;
+  }
+
+  .receipt-card h1 {
+    font-size: 1.85rem;
+  }
+
+  .receipt-card .receipt-grid {
+    gap: 0.38rem;
+    margin: 0.7rem 0;
+  }
+
+  .receipt-card .info-tile {
+    padding: 0.52rem 0.45rem;
+    border-radius: 13px;
+  }
+
+  .receipt-card .info-tile span {
+    font-size: 0.62rem;
+  }
+
+  .receipt-card .info-tile strong {
+    font-size: 0.78rem;
+  }
+
+  .receipt-card .summary-row {
+    gap: 0.45rem;
+    padding: 0.45rem 0;
+    font-size: 0.84rem;
+  }
+
+  .staff-ticket {
+    padding: 0.78rem;
+    border-radius: 20px;
+  }
+
+  .staff-ticket-customer .eyebrow {
+    font-size: 0.68rem;
+  }
+
+  .staff-ticket-customer h2 {
+    font-size: 1.18rem;
+  }
+
+  .staff-ticket-details {
+    gap: 0.38rem;
+  }
+
+  .staff-ticket .info-tile {
+    padding: 0.5rem 0.42rem;
+    border-radius: 13px;
+  }
+
+  .staff-ticket .info-tile strong {
+    font-size: 0.76rem;
+  }
+
+  .staff-ticket-item {
+    font-size: 0.82rem;
   }
 
   .menu-card-footer,
